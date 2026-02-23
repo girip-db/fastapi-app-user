@@ -37,13 +37,21 @@ It covers three real-world scenarios for calling the app with the user's identit
 
 ## Repository Structure
 
-```
-fastapi-app/                          # The FastAPI backend (deployed as Databricks App)
-examples/
-  1-browser-ui/                       # Use Case 1: Browser -> React UI -> FastAPI
-  2-databricks-notebook/              # Use Case 2: Databricks Notebook -> FastAPI (PKCE)
-  3-local-machine/                    # Use Case 3: Local Jupyter/Cursor -> FastAPI (CLI OAuth)
-```
+### [`fastapi-app/`](fastapi-app/)
+
+The core **FastAPI backend** deployed as a Databricks App. Exposes three endpoints (`/api/v1/healthcheck`, `/api/v1/me`, `/api/v1/trips`) that demonstrate user authentication and SQL query execution on behalf of the logged-in user. Includes `deploy.sh` for one-command deployment.
+
+### [`examples/1-browser-ui/`](examples/1-browser-ui/)
+
+A **React dashboard** deployed as a separate Databricks App. The user's browser session handles OAuth transparently -- no tokens or login prompts needed. The React frontend calls proxy endpoints on its own backend, which forwards the user's `x-forwarded-access-token` to the FastAPI app. Includes `deploy.sh`.
+
+### [`examples/2-databricks-notebook/`](examples/2-databricks-notebook/)
+
+A **Databricks notebook** that calls the FastAPI app using the OAuth **PKCE flow**. Since notebooks run on remote clusters with no browser, the user clicks an auth URL once, pastes back a code, and the notebook exchanges it for a scoped OAuth token. Includes `deploy.sh` to sync the notebook to your workspace.
+
+### [`examples/3-local-machine/`](examples/3-local-machine/)
+
+Scripts for calling the FastAPI app from a **local dev machine** (Jupyter, Cursor, terminal). Uses `getOAuth.py` which runs a full automated PKCE flow -- it opens your browser, captures the callback on a local HTTP server, and returns a properly scoped token. Includes `setup_local.sh` for one-command environment setup and `local_test.py` to test all endpoints.
 
 ## Configuration
 

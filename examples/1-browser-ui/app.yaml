@@ -1,0 +1,4 @@
+command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+env:
+  - name: FASTAPI_APP_URL
+    value: "<YOUR_FASTAPI_APP_URL>"  # Replaced automatically by deploy.sh from .env

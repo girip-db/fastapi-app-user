@@ -57,12 +57,12 @@ The `user_info` block confirms the query ran as your identity.
 
 ## Notebook 2: SP Group Lookup (`notebook_sp_groups.py`)
 
-Uses the app's **service principal** with M2M OAuth (`client_credentials` flow) and the `scim` scope to look up a user's group memberships. The notebook user's email is auto-detected.
+Uses the app's **service principal** with M2M OAuth (`client_credentials` flow) to authenticate with the app, and the notebook's **native token** (via `X-User-Token` header) for verified identity. The app calls SCIM `/Me` with that token to prove who the caller is -- no impersonation possible.
 
 ### Prerequisites
 
-- The app's SP must be a **workspace admin** (added to the `admins` group)
 - You need the SP's `client_id` and `client_secret`
+- The SP must have **CAN USE** permission on the Databricks App
 
 ### Configuration
 
@@ -73,16 +73,14 @@ SP_CLIENT_ID = "<YOUR_SP_CLIENT_ID>"
 SP_CLIENT_SECRET = "<YOUR_SP_CLIENT_SECRET>"  # Use dbutils.secrets.get() in production
 ```
 
-`LOOKUP_EMAIL` is auto-detected via `spark.sql("SELECT current_user()")`.
-
 ### How It Works
 
-1. **Step 1**: Gets an SP OAuth token via `client_credentials` with `scope=scim`
-2. **Step 2**: Calls the SCIM `/Users` API directly to look up the user's groups
-3. **Step 3**: Calls the app's `/api/v1/me/groups` with the `X-User-Email` header -- the app uses its SP credentials with an explicit `scim`-scoped token to fetch groups
+1. **Step 1**: Gets an SP OAuth token via `client_credentials` (used for app authentication)
+2. **Step 2**: Calls the SCIM `/Users` API directly to look up the user's groups (demonstrates SP SCIM access)
+3. **Step 3**: Calls the app's `/api/v1/me/groups` with the `X-User-Token` header containing the notebook's native token. The app verifies identity via SCIM `/Me`.
 
 ### Key Learnings
 
-- The `scim` scope must be **explicitly requested** in the SP token -- the Databricks SDK's default token does not include it
-- The SP must be a **workspace admin** for the SCIM `/Users` endpoint to return group memberships (non-admin SPs get the user data but with empty groups)
-- When calling the app programmatically, set the `X-User-Email` header to specify the real user's identity instead of relying on `x-forwarded-email` (which would be the SP's identity for M2M callers)
+- The notebook's native token (from `dbutils.notebook.entry_point...apiToken()`) can be used for identity verification via SCIM `/Me`
+- The `X-User-Token` header provides **verified identity** -- the app calls SCIM `/Me` with that token, so the caller cannot impersonate another user
+- The SP token in the `Authorization` header handles app proxy authentication, while `X-User-Token` proves the real user

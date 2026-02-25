@@ -8,7 +8,7 @@ It covers four real-world scenarios for calling the app with the user's identity
 |---|----------|-------------|----------------|
 | 1 | Browser accessing the app UI | Automatic (Databricks session) | Yes |
 | 2a | Databricks notebook calling the API | OAuth PKCE (paste code once) | Yes |
-| 2b | Databricks notebook -- SP group lookup | SP M2M OAuth with `scim` scope | Yes (via `X-User-Email` header) |
+| 2b | Databricks notebook -- SP group lookup | SP M2M OAuth + notebook token (`X-User-Token`) | Yes (verified via SCIM `/Me`) |
 | 3 | Local machine (Jupyter/Cursor) calling the API | Databricks CLI OAuth | Yes |
 
 ## Architecture
@@ -51,7 +51,7 @@ A **React dashboard** deployed as a separate Databricks App. The user's browser 
 
 **Databricks notebooks** that call the FastAPI app. Includes two notebooks:
 - **`notebook_example.py`** -- User PKCE flow: the user clicks an auth URL once, pastes back a code, and the notebook exchanges it for a scoped OAuth token. Queries run as the user.
-- **`notebook_sp_groups.py`** -- SP M2M OAuth: uses the app's service principal with `client_credentials` grant and `scim` scope to look up any user's group memberships via SCIM. Auto-detects the notebook user's email and passes it via the `X-User-Email` header to the app endpoint. Includes `deploy.sh` to sync both notebooks to your workspace.
+- **`notebook_sp_groups.py`** -- SP M2M OAuth: authenticates with the app using an SP `client_credentials` token, then passes the notebook's native token via the `X-User-Token` header. The app verifies the caller's identity by calling SCIM `/Me` with that token -- no impersonation possible. Includes `deploy.sh` to sync both notebooks to your workspace.
 
 ### [`examples/3-local-machine/`](examples/3-local-machine/)
 
@@ -120,14 +120,16 @@ Add these scopes under **User Authorization** for **each** deployed app (FastAPI
 
 When calling the app from a **notebook or local machine** (Use Cases 2 & 3), the OAuth token request must also include these same scopes. The deploy scripts read the `SCOPES` variable from `.env` and inject them automatically.
 
-### SP Group Lookup Requirements
+### Group Lookup (`/api/v1/me/groups`)
 
-For the `/api/v1/me/groups` endpoint to return groups via the SP path (programmatic callers):
+All paths use SCIM `/Me` with a verifiable token -- no self-asserted identity:
 
-1. The app's **service principal must be a workspace admin** (add it to the `admins` group)
-2. The SP token must include the **`scim` scope** -- the app handles this by requesting an explicit `client_credentials` token with `scope=scim`
+| Access Method | Token Source | How Identity Is Verified |
+|---|---|---|
+| **Browser** | `x-forwarded-access-token` (injected by proxy) | SCIM `/Me` with the user's OAuth token |
+| **Notebook** (`X-User-Token`) | Notebook native token via `dbutils` | SCIM `/Me` with the notebook token |
 
-The browser path uses the user's own token with SCIM `/Me` and does not require any of the above.
+No SP admin permissions are needed -- each token proves the caller's own identity.
 
 ### 4. Try each use case
 
@@ -146,7 +148,7 @@ When a user accesses a Databricks App, the Apps proxy:
 
 The FastAPI app reads these headers to:
 - Identify who is calling (`/api/v1/me`)
-- Look up the user's group memberships (`/api/v1/me/groups`) via SCIM `/Me` (user token) or SCIM `/Users` (SP token with `scim` scope)
+- Look up the user's group memberships (`/api/v1/me/groups`) via SCIM `/Me` using a verified token (browser or notebook)
 - Run SQL queries **as the user** using their forwarded token (`/api/v1/trips`)
 - Fall back to the app's service principal if no user token is present
 

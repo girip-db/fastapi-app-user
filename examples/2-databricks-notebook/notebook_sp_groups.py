@@ -102,19 +102,22 @@ else:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 3: Call the FastAPI app's /me/groups endpoint
+# MAGIC ## Step 3: Call the FastAPI app's /me/groups with verified identity
 # MAGIC
-# MAGIC Pass `X-User-Email` header so the app looks up the real user's groups
-# MAGIC via SP credentials, instead of relying on `x-forwarded-email` (which
-# MAGIC would be the SP's identity for programmatic callers).
+# MAGIC Pass `X-User-Token` header with the notebook's native token. The app
+# MAGIC verifies the caller's identity by calling SCIM `/Me` with that token --
+# MAGIC no impersonation is possible since the token proves who the caller is.
 
 # COMMAND ----------
 
 assert sp_token, "No SP token -- fix Step 1 first"
 
+# Get the notebook's native token for identity verification
+user_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()  # noqa: F821
+
 headers = {
     "Authorization": f"Bearer {sp_token}",
-    "X-User-Email": LOOKUP_EMAIL,
+    "X-User-Token": user_token,
 }
 
 resp = requests.get(f"{APP_URL}/api/v1/me/groups", headers=headers)
@@ -126,9 +129,7 @@ print(json.dumps(resp.json(), indent=2) if resp.status_code == 200 else resp.tex
 # MAGIC %md
 # MAGIC ## Summary
 # MAGIC
-# MAGIC | Approach | Token Type | SCIM Scope Needed | Groups Returned |
+# MAGIC | Approach | Token | Identity Verified? | Groups Returned |
 # MAGIC |---|---|---|---|
-# MAGIC | Browser (User Auth) | User token via `x-forwarded-access-token` | No (`iam.current-user:read` is enough for `/Me`) | Current user's groups |
-# MAGIC | Notebook (PKCE) | User OAuth token | Add `scim` if calling `/Users` | Current user's groups |
-# MAGIC | Notebook (SP M2M) | SP client_credentials token | Yes (`scim`) | Any user's groups (via `/Users`) |
-# MAGIC | App internal (SP) | SP env vars | SP needs workspace admin or `scim` scope | Any user's groups |
+# MAGIC | Browser (User Auth) | `x-forwarded-access-token` | Yes (SCIM `/Me`) | Current user's groups |
+# MAGIC | Notebook (`X-User-Token`) | Notebook native token | Yes (SCIM `/Me`) | Current user's groups |

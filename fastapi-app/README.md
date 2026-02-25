@@ -13,21 +13,21 @@ The core API application deployed as a Databricks App. Provides four endpoints t
 
 ### `/api/v1/me/groups` -- Group Membership Lookup
 
-This endpoint supports two paths for resolving groups:
+All paths verify the caller's identity via SCIM `/Me` -- no self-asserted headers:
 
-| Access Method | How Groups Are Fetched | Requirements |
+| Access Method | Token Source | How Identity Is Verified |
 |---|---|---|
-| **Browser** (user token available) | SCIM `/Me` with the user's own `x-forwarded-access-token` | `iam.current-user:read` scope on the app |
-| **Programmatic** (set `X-User-Email` header) | SCIM `/Users` with an SP token carrying the `scim` scope | SP in `admins` group + `scim` API scope enabled |
+| **Browser** | `x-forwarded-access-token` (injected by Databricks proxy) | SCIM `/Me` with the user's OAuth token |
+| **Notebook** (`X-User-Token` header) | Notebook native token via `dbutils` | SCIM `/Me` with the notebook token |
 
-When no `X-User-Email` header is set, the endpoint uses `x-forwarded-email` from the proxy (browser flow). When `X-User-Email` is provided, it forces the SP path regardless of whether a user token exists.
+If neither token is present, the endpoint returns `400`.
 
 ## How Authentication Works
 
 - The Databricks Apps proxy sits in front of this app
 - It validates incoming OAuth tokens and injects `x-forwarded-*` headers
 - `/api/v1/trips` uses the `x-forwarded-access-token` to run SQL **as the user**
-- `/api/v1/me/groups` uses either the user's token (SCIM `/Me`) or SP credentials (SCIM `/Users`) for group lookups
+- `/api/v1/me/groups` uses a verified token (browser or `X-User-Token`) with SCIM `/Me` for group lookups
 - If no user token is present, SQL queries fall back to the app's service principal
 
 ## Configuration
@@ -76,10 +76,9 @@ The script reads `FASTAPI_APP_NAME`, `FASTAPI_WORKSPACE_PATH`, `WAREHOUSE_ID`, a
    - `CAN USE` on the SQL warehouse
    - `SELECT` on the table being queried
 
-4. **SP Group Lookup** (for `/me/groups` via SP path):
-   - Add the app's SP to the **`admins` group** (Settings > Identity and access > Groups > admins)
-   - The app automatically requests an SP token with `scope=scim` via `client_credentials` for SCIM lookups
-   - Without admin membership, the SCIM `/Users` response will include the user but with empty groups
+4. **Group Lookup** (`/me/groups`):
+   - All paths use SCIM `/Me` with a verified token (browser OAuth token or notebook native token via `X-User-Token` header)
+   - No SP admin permissions needed -- each token proves the caller's own identity
 
 ### Verifying User Authorization Works
 

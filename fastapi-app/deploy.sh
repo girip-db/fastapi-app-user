@@ -44,7 +44,7 @@ sed -i.bak "s|<YOUR_WAREHOUSE_ID>|${WAREHOUSE_ID}|g" "$SCRIPT_DIR/app.yaml"
 
 # Sync local files to workspace (full overwrite)
 echo "Syncing local source to workspace..."
-databricks sync "$SCRIPT_DIR" "$WORKSPACE_PATH" --full $PROFILE_FLAG
+databricks sync "$SCRIPT_DIR" "$WORKSPACE_PATH" $PROFILE_FLAG
 
 # Restore app.yaml to its template form so future deploys work
 mv "$SCRIPT_DIR/app.yaml.bak" "$SCRIPT_DIR/app.yaml"

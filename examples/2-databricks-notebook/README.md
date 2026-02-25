@@ -52,3 +52,37 @@ Trips       [200]: {"count": 5, "results": [...], "user_info": {"email": "you@co
 ```
 
 The `user_info` block confirms the query ran as your identity.
+
+---
+
+## Notebook 2: SP Group Lookup (`notebook_sp_groups.py`)
+
+Uses the app's **service principal** with M2M OAuth (`client_credentials` flow) and the `scim` scope to look up a user's group memberships. The notebook user's email is auto-detected.
+
+### Prerequisites
+
+- The app's SP must be a **workspace admin** (added to the `admins` group)
+- You need the SP's `client_id` and `client_secret`
+
+### Configuration
+
+Update the configuration cell:
+
+```python
+SP_CLIENT_ID = "<YOUR_SP_CLIENT_ID>"
+SP_CLIENT_SECRET = "<YOUR_SP_CLIENT_SECRET>"  # Use dbutils.secrets.get() in production
+```
+
+`LOOKUP_EMAIL` is auto-detected via `spark.sql("SELECT current_user()")`.
+
+### How It Works
+
+1. **Step 1**: Gets an SP OAuth token via `client_credentials` with `scope=scim`
+2. **Step 2**: Calls the SCIM `/Users` API directly to look up the user's groups
+3. **Step 3**: Calls the app's `/api/v1/me/groups` with the `X-User-Email` header -- the app uses its SP credentials with an explicit `scim`-scoped token to fetch groups
+
+### Key Learnings
+
+- The `scim` scope must be **explicitly requested** in the SP token -- the Databricks SDK's default token does not include it
+- The SP must be a **workspace admin** for the SCIM `/Users` endpoint to return group memberships (non-admin SPs get the user data but with empty groups)
+- When calling the app programmatically, set the `X-User-Email` header to specify the real user's identity instead of relying on `x-forwarded-email` (which would be the SP's identity for M2M callers)

@@ -1,6 +1,6 @@
 # FastAPI Backend App
 
-The core API application deployed as a Databricks App. Provides three endpoints that demonstrate user authentication.
+The core API application deployed as a Databricks App. Provides four endpoints that demonstrate user authentication and group membership lookup.
 
 ## Endpoints
 
@@ -8,14 +8,27 @@ The core API application deployed as a Databricks App. Provides three endpoints 
 |----------|-------------|
 | `GET /api/v1/healthcheck` | Returns status + authenticated user info |
 | `GET /api/v1/me` | Returns the caller's identity (email, username, auth status) |
+| `GET /api/v1/me/groups` | Returns the user's group memberships (see below) |
 | `GET /api/v1/trips` | Runs a SQL query and returns results as JSON |
+
+### `/api/v1/me/groups` -- Group Membership Lookup
+
+This endpoint supports two paths for resolving groups:
+
+| Access Method | How Groups Are Fetched | Requirements |
+|---|---|---|
+| **Browser** (user token available) | SCIM `/Me` with the user's own `x-forwarded-access-token` | `iam.current-user:read` scope on the app |
+| **Programmatic** (set `X-User-Email` header) | SCIM `/Users` with an SP token carrying the `scim` scope | SP in `admins` group + `scim` API scope enabled |
+
+When no `X-User-Email` header is set, the endpoint uses `x-forwarded-email` from the proxy (browser flow). When `X-User-Email` is provided, it forces the SP path regardless of whether a user token exists.
 
 ## How Authentication Works
 
 - The Databricks Apps proxy sits in front of this app
 - It validates incoming OAuth tokens and injects `x-forwarded-*` headers
 - `/api/v1/trips` uses the `x-forwarded-access-token` to run SQL **as the user**
-- If no user token is present, it falls back to the app's service principal
+- `/api/v1/me/groups` uses either the user's token (SCIM `/Me`) or SP credentials (SCIM `/Users`) for group lookups
+- If no user token is present, SQL queries fall back to the app's service principal
 
 ## Configuration
 
@@ -62,6 +75,11 @@ The script reads `FASTAPI_APP_NAME`, `FASTAPI_WORKSPACE_PATH`, `WAREHOUSE_ID`, a
 3. **Service Principal Grants** (for fallback when no user token):
    - `CAN USE` on the SQL warehouse
    - `SELECT` on the table being queried
+
+4. **SP Group Lookup** (for `/me/groups` via SP path):
+   - Add the app's SP to the **`admins` group** (Settings > Identity and access > Groups > admins)
+   - The app automatically requests an SP token with `scope=scim` via `client_credentials` for SCIM lookups
+   - Without admin membership, the SCIM `/Users` response will include the user but with empty groups
 
 ### Verifying User Authorization Works
 

@@ -2,12 +2,13 @@
 
 This repository demonstrates how to build and consume a **FastAPI application** deployed on [Databricks Apps](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/) with **User Authorization** (OAuth).
 
-It covers three real-world scenarios for calling the app with the user's identity:
+It covers four real-world scenarios for calling the app with the user's identity:
 
 | # | Use Case | Auth Method | User Identity? |
 |---|----------|-------------|----------------|
 | 1 | Browser accessing the app UI | Automatic (Databricks session) | Yes |
-| 2 | Databricks notebook calling the API | OAuth PKCE (paste code once) | Yes |
+| 2a | Databricks notebook calling the API | OAuth PKCE (paste code once) | Yes |
+| 2b | Databricks notebook -- SP group lookup | SP M2M OAuth with `scim` scope | Yes (via `X-User-Email` header) |
 | 3 | Local machine (Jupyter/Cursor) calling the API | Databricks CLI OAuth | Yes |
 
 ## Architecture
@@ -29,6 +30,7 @@ It covers three real-world scenarios for calling the app with the user's identit
          +--------> FastAPI App <----------+
                     /api/v1/healthcheck
                     /api/v1/me
+                    /api/v1/me/groups
                     /api/v1/trips
                          |
                     SQL Warehouse
@@ -39,7 +41,7 @@ It covers three real-world scenarios for calling the app with the user's identit
 
 ### [`fastapi-app/`](fastapi-app/)
 
-The core **FastAPI backend** deployed as a Databricks App. Exposes three endpoints (`/api/v1/healthcheck`, `/api/v1/me`, `/api/v1/trips`) that demonstrate user authentication and SQL query execution on behalf of the logged-in user. Includes `deploy.sh` for one-command deployment.
+The core **FastAPI backend** deployed as a Databricks App. Exposes four endpoints (`/api/v1/healthcheck`, `/api/v1/me`, `/api/v1/me/groups`, `/api/v1/trips`) that demonstrate user authentication, group membership lookup via SCIM, and SQL query execution on behalf of the logged-in user. Includes `deploy.sh` for one-command deployment.
 
 ### [`examples/1-browser-ui/`](examples/1-browser-ui/)
 
@@ -47,7 +49,9 @@ A **React dashboard** deployed as a separate Databricks App. The user's browser 
 
 ### [`examples/2-databricks-notebook/`](examples/2-databricks-notebook/)
 
-A **Databricks notebook** that calls the FastAPI app using the OAuth **PKCE flow**. Since notebooks run on remote clusters with no browser, the user clicks an auth URL once, pastes back a code, and the notebook exchanges it for a scoped OAuth token. Includes `deploy.sh` to sync the notebook to your workspace.
+**Databricks notebooks** that call the FastAPI app. Includes two notebooks:
+- **`notebook_example.py`** -- User PKCE flow: the user clicks an auth URL once, pastes back a code, and the notebook exchanges it for a scoped OAuth token. Queries run as the user.
+- **`notebook_sp_groups.py`** -- SP M2M OAuth: uses the app's service principal with `client_credentials` grant and `scim` scope to look up any user's group memberships via SCIM. Auto-detects the notebook user's email and passes it via the `X-User-Email` header to the app endpoint. Includes `deploy.sh` to sync both notebooks to your workspace.
 
 ### [`examples/3-local-machine/`](examples/3-local-machine/)
 
@@ -116,6 +120,15 @@ Add these scopes under **User Authorization** for **each** deployed app (FastAPI
 
 When calling the app from a **notebook or local machine** (Use Cases 2 & 3), the OAuth token request must also include these same scopes. The deploy scripts read the `SCOPES` variable from `.env` and inject them automatically.
 
+### SP Group Lookup Requirements
+
+For the `/api/v1/me/groups` endpoint to return groups via the SP path (programmatic callers):
+
+1. The app's **service principal must be a workspace admin** (add it to the `admins` group)
+2. The SP token must include the **`scim` scope** -- the app handles this by requesting an explicit `client_credentials` token with `scope=scim`
+
+The browser path uses the user's own token with SCIM `/Me` and does not require any of the above.
+
 ### 4. Try each use case
 
 - **Browser UI**: `cd examples/1-browser-ui && ./deploy.sh`
@@ -133,6 +146,7 @@ When a user accesses a Databricks App, the Apps proxy:
 
 The FastAPI app reads these headers to:
 - Identify who is calling (`/api/v1/me`)
+- Look up the user's group memberships (`/api/v1/me/groups`) via SCIM `/Me` (user token) or SCIM `/Users` (SP token with `scim` scope)
 - Run SQL queries **as the user** using their forwarded token (`/api/v1/trips`)
 - Fall back to the app's service principal if no user token is present
 

@@ -70,11 +70,35 @@ def run_query(sql_query: str, access_token: str | None = None) -> List[Dict[str,
         conn.close()
 
 
+def _extract_user_token(request: Request) -> tuple[str | None, str]:
+    """Extract a Databricks access token from the request.
+
+    Checks these sources in priority order:
+      1. x-forwarded-access-token  (browser via Databricks Apps proxy)
+      2. Authorization: Bearer ...  (notebook PKCE / local machine OAuth)
+      3. X-User-Token               (notebook native token)
+
+    Returns (token, auth_mode) where token is None if no user token found.
+    """
+    token = request.headers.get("x-user-token")
+    if token:
+        return token, "notebook_native_token"
+
+    token = request.headers.get("x-forwarded-access-token")
+    if token:
+        return token, "proxy_user_token"
+
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        return auth_header[7:].strip(), "bearer_token"
+
+    return None, "service_principal"
+
+
 @router.get("/trips")
 def get_trips(request: Request) -> JSONResponse:
     """Query a table and return results."""
-    user_token = request.headers.get("x-forwarded-access-token")
-    auth_mode = "user_token" if user_token else "service_principal"
+    user_token, auth_mode = _extract_user_token(request)
 
     if not DATABRICKS_WAREHOUSE_ID:
         raise HTTPException(

@@ -1,4 +1,6 @@
 fastapi
 uvicorn
-databricks-sdk
+databricks-sdk>=0.60.0
 databricks-sql-connector
+sqlalchemy
+asyncpg

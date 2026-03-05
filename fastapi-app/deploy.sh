@@ -39,15 +39,27 @@ echo "Workspace path: $WORKSPACE_PATH"
 echo "CLI profile:    ${PROFILE:-default}"
 echo ""
 
-# Write warehouse ID into app.yaml (temporarily)
+# Save a copy of app.yaml before modifying
+cp "$SCRIPT_DIR/app.yaml" "$SCRIPT_DIR/app.yaml.template"
+
+# Write config values into app.yaml (temporarily)
 sed -i.bak "s|<YOUR_WAREHOUSE_ID>|${WAREHOUSE_ID}|g" "$SCRIPT_DIR/app.yaml"
+sed -i.bak "s|LAKEBASE_HOST_PLACEHOLDER|${LAKEBASE_HOST}|g" "$SCRIPT_DIR/app.yaml"
+sed -i.bak "s|LAKEBASE_DATABASE_NAME_PLACEHOLDER|${LAKEBASE_DATABASE_NAME}|g" "$SCRIPT_DIR/app.yaml"
+sed -i.bak "s|LAKEBASE_ENDPOINT_PLACEHOLDER|${LAKEBASE_ENDPOINT}|g" "$SCRIPT_DIR/app.yaml"
+sed -i.bak "s|LAKEBASE_SCHEMA_PLACEHOLDER|${LAKEBASE_SCHEMA:-public}|g" "$SCRIPT_DIR/app.yaml"
+rm -f "$SCRIPT_DIR/app.yaml.bak"
+
+echo "app.yaml after substitution:"
+cat "$SCRIPT_DIR/app.yaml"
+echo ""
 
 # Sync local files to workspace (full overwrite)
 echo "Syncing local source to workspace..."
 databricks sync "$SCRIPT_DIR" "$WORKSPACE_PATH" $PROFILE_FLAG
 
 # Restore app.yaml to its template form so future deploys work
-mv "$SCRIPT_DIR/app.yaml.bak" "$SCRIPT_DIR/app.yaml"
+mv "$SCRIPT_DIR/app.yaml.template" "$SCRIPT_DIR/app.yaml"
 
 # Create the app (ignore error if it already exists)
 echo ""
@@ -68,3 +80,10 @@ echo "  3. Apps > $APP_NAME > Settings > User Authorization -- add the 'sql' sco
 echo "  4. Grant the app's service principal:"
 echo "     - CAN USE on the SQL warehouse"
 echo "     - SELECT on the table being queried"
+echo ""
+echo "  For Lakebase endpoints (if configured):"
+echo "     - LAKEBASE_HOST: ${LAKEBASE_HOST:-<not set>}"
+echo "     - LAKEBASE_DATABASE_NAME: ${LAKEBASE_DATABASE_NAME:-<not set>}"
+echo "     - LAKEBASE_ENDPOINT: ${LAKEBASE_ENDPOINT:-<auto-discover>}"
+echo "     - Grant the app SP connection access to the Lakebase instance"
+echo "     - Grant the app SP appropriate table permissions in PostgreSQL"

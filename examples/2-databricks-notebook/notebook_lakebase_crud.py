@@ -18,6 +18,14 @@
 
 # COMMAND ----------
 
+# MAGIC %pip install --upgrade databricks-sdk
+
+# COMMAND ----------
+
+dbutils.library.restartPython()  # noqa: F821
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC ## Configuration
 # MAGIC
@@ -32,14 +40,6 @@ SP_CLIENT_ID = "<YOUR_SP_CLIENT_ID>"
 SP_CLIENT_SECRET = "<YOUR_SP_CLIENT_SECRET>"  # Use dbutils.secrets.get() in production
 
 SCOPES = "sql iam.current-user:read catalog.tables:read iam.access-control:read"
-
-# COMMAND ----------
-
-# MAGIC %pip install --upgrade databricks-sdk
-
-# COMMAND ----------
-
-dbutils.library.restartPython()  # noqa: F821
 
 # COMMAND ----------
 

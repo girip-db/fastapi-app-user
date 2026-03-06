@@ -94,36 +94,6 @@ print(f"\n/trips status: {resp.status_code}")
 print(f"auth_mode:     {resp.json().get('auth_mode')}")
 print(json.dumps(resp.json(), indent=2) if resp.status_code == 200 else resp.text)
 
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Method 2: WorkspaceClient OAuth Token as X-User-Token
-# MAGIC
-# MAGIC Uses the Databricks SDK's `WorkspaceClient` to obtain an OAuth token
-# MAGIC for the current user. This token may have broader scopes than the
-# MAGIC notebook native token depending on your workspace configuration.
-
-# COMMAND ----------
-
-assert sp_token, "No SP token -- fix Step 1 first"
-
-from databricks.sdk import WorkspaceClient
-
-w = WorkspaceClient()
-sdk_token = w.config.getOauthToken()
-
-print(f"SDK token prefix: {sdk_token[:20]}...")
-
-headers = {
-    "Authorization": f"Bearer {sp_token}",
-    "X-User-Token": sdk_token,
-}
-
-# Call /trips -- SQL runs as the user
-resp = requests.get(f"{APP_URL}/api/v1/trips", headers=headers)
-print(f"\n/trips status: {resp.status_code}")
-print(f"auth_mode:     {resp.json().get('auth_mode')}")
-print(json.dumps(resp.json(), indent=2) if resp.status_code == 200 else resp.text)
 
 # COMMAND ----------
 
@@ -144,12 +114,6 @@ resp = requests.get(
 )
 print(json.dumps(resp.json().get("auth_headers", {}), indent=2))
 
-print("\n=== Method 2: WorkspaceClient token ===")
-resp = requests.get(
-    f"{APP_URL}/api/v1/debug/headers",
-    headers={"Authorization": f"Bearer {sp_token}", "X-User-Token": sdk_token},
-)
-print(json.dumps(resp.json().get("auth_headers", {}), indent=2))
 
 # COMMAND ----------
 
@@ -159,9 +123,7 @@ print(json.dumps(resp.json().get("auth_headers", {}), indent=2))
 # MAGIC | Method | User Token Source | Automated? | SQL Runs As |
 # MAGIC |---|---|---|---|
 # MAGIC | Notebook native token | `dbutils...apiToken().get()` | Yes | Interactive user |
-# MAGIC | WorkspaceClient OAuth | `WorkspaceClient().config.authenticate()` | Yes | Interactive user |
 # MAGIC
-# MAGIC Both methods:
 # MAGIC - Use SP `client_credentials` for app access (`Authorization: Bearer`)
 # MAGIC - Pass user identity via `X-User-Token` header
 # MAGIC - The app checks `X-User-Token` first, so SQL runs as the user
